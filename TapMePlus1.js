@@ -24,19 +24,19 @@
     const MONITOR_INTERVAL = 2500;
     // 默认配置
     const defaultConfig = {
-        minScoreThreshold: 5,
-        clicksDiffWeight: 6000,
-        chainCountWeight: 300,
-        maxNumberWeight: 10,
-        maxContinuousClicks: 3,
-        allowLowScoreClicks: true,
-        lowScoreThreshold: 15,
-        lowScoreClickValueWeight: 0.8,
-        breakthroughModeEnabled: true,
-        breakthroughMinClicksDiff: 1,
-        breakthroughValueThreshold: -500,
-        breakthroughRandomClickAttempts: 5,
-        autoRestartAfterGameEnd: true
+    minScoreThreshold: 5,
+    clicksDiffWeight: 5000,         // 略微降低，给其他因素空间
+    chainCountWeight: 500,          // 提高连锁价值
+    maxNumberWeight: 80,            // 大幅提高最大数字的价值
+    maxContinuousClicks: 4,         // 允许一次投入更多点击来构造大数字
+    allowLowScoreClicks: true,      // 保持开启，但可以考虑下面的权重调整
+    lowScoreThreshold: 10,          // 稍微降低低分阈值
+    lowScoreClickValueWeight: 0.5,  // 大幅降低低分点击的价值权重
+    breakthroughModeEnabled: true,
+    breakthroughMinClicksDiff: 1,   // 破局时至少要能赚回1个点击
+    breakthroughValueThreshold: -100, // 破局的操作不能太亏
+    breakthroughRandomClickAttempts: 5,
+    autoRestartAfterGameEnd: true
     };
     // 状态变量
     let config = {...defaultConfig};
