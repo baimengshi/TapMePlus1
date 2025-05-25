@@ -3,6 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      3.5
 // @description  修复的自动通关脚本，专注于连锁反应和高效得分
+// @author       nobody
 // @match        https://tapmeplus1.com/*
 // @grant        none
 // ==UserScript==
