@@ -620,7 +620,7 @@
         });
         // 标题
         const title = document.createElement('div');
-        title.textContent = 'TapMePlus1 自动通关修复版 (v3.5)';
+        title.textContent = 'TapMePlus1 自动通关版 (v3.5)';
         title.style.fontWeight = 'bold';
         title.style.marginBottom = '10px';
         title.style.fontSize = '16px';
