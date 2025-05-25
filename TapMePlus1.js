@@ -5,7 +5,7 @@
 // @description  修复的自动通关脚本，专注于连锁反应和高效得分
 // @match        https://tapmeplus1.com/*
 // @grant        none
-// ==/UserScript==
+// ==UserScript==
 (function() {
     'use strict';
     if (window.autoTapmePlus1Injected) {
