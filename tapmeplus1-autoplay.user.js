@@ -2,11 +2,11 @@
 // @name         TapMePlus1 自动通关
 // @namespace    http://tampermonkey.net/
 // @version      3.5
-// @description  修复的自动通关脚本，专注于连锁反应和高效得分
-// @author       nobody
+// @description  自动通关脚本，专注于连锁反应和高效得分
+// @author       泡小胡呢
 // @match        https://tapmeplus1.com/*
 // @grant        none
-// ==UserScript==
+// ==/UserScript==
 (function() {
     'use strict';
     if (window.autoTapmePlus1Injected) {
