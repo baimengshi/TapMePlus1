@@ -16,7 +16,7 @@
 ## 安装说明
 
 1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展
-2. 点击[此处](https://github.com/yourusername/tapmeplus1-autoplay/raw/main/tapmeplus1-autoplay.user.js)安装脚本
+2. 点击[此处](https://github.com/baimengshi/TapMePlus1/blob/main/TapMePlus1.js)安装脚本
 3. 访问 [TapMePlus1](https://tapmeplus1.com/) 开始游戏
 
 ## 控制面板功能
