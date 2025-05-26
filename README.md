@@ -1,6 +1,5 @@
 # TapMePlus1 自动通关脚本
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)  
 一款强大的 Tampermonkey 用户脚本，用于自动化 TapMePlus1 游戏的通关过程。
 
 ## 功能特性
@@ -31,21 +30,22 @@
 脚本包含以下可调整参数（在代码中修改）:
 
 ```javascript
-const defaultConfig = {
-    minScoreThreshold: 5,              // 最低得分阈值
-    clicksDiffWeight: 5000,           // 行动点差值权重
-    chainCountWeight: 500,            // 连锁次数权重
-    maxNumberWeight: 80,              // 最大数字权重
-    maxContinuousClicks: 4,           // 最大连续点击次数
-    breakthroughModeEnabled: true,    // 启用破局模式
-    autoRestartAfterGameEnd: true     // 游戏结束自动重启
-};
+    function getCurrentPhase(score) {
+        if (score >= 1800) return { threshold: 1800, maxClicks: 1, riskFactor: 0.2 };
+        if (score >= 1200) return { threshold: 1200, maxClicks: 1, riskFactor: 0.4 };
+        if (score >= 500) return { threshold: 500, maxClicks: 1, riskFactor: 0.7 };
+        return { threshold: 0, maxClicks: 2, riskFactor: 1.0 };
+    }
 ```
 ## 工作原理
 棋盘分析：实时读取游戏棋盘状态
+
 模拟预测：预测每个可能的点击结果
+
 价值评估：综合考虑得分、行动点和连锁效果
+
 最优选择：执行价值最高的点击操作
+
 动画同步：智能等待游戏动画完成
 
 ## 常见问题
@@ -65,4 +65,4 @@ A: 请提交issue报告问题，我会尽快适配新版本。
 - 性能优化
 
 ## 开源协议
-MIT License - 自由使用和修改，需保留原作者信息。
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) 
