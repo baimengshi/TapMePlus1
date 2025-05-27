@@ -16,8 +16,8 @@
     // ====== 基本参数 ======
     const BOARD_SIZE = 5;
     const MAX_CLICKS = 5;
-    const BEAM_WIDTH = 3;
-    const SEARCH_DEPTH = 2;
+    const BEAM_WIDTH = 5;
+    const SEARCH_DEPTH = 3;
     const MIN_CLICK_DELAY = 80;
     const BASE_CLICK_DELAY = 120;
 
@@ -180,6 +180,9 @@
         let maxGroupSize = 0, groupCount = 0;
         let bigGroupCount = 0;
         for (const g of groups) {
+            // 增加判断，避免访问空数组
+            if (!g.cells || g.cells.length === 0) continue;
+
             groupCount++;
             if (g.cells.length > maxGroupSize) maxGroupSize = g.cells.length;
             if (g.cells.length >= 5) bigGroupCount++; // 5连及以上大团
@@ -187,93 +190,139 @@
 
         // 2. 潜在连锁奖励
         let potentialChainCount = 0;
-        for (let i = 0; i < BOARD_SIZE; i++) {
-            for (let j = 0; j < BOARD_SIZE; j++) {
-                if (board[i][j] !== null) {
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                if (board[r][c] !== null) {
                     let same = 0;
                     for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-                        const ni = i + dr, nj = j + dc;
-                        if (ni >= 0 && ni < BOARD_SIZE && nj >= 0 && nj < BOARD_SIZE && board[ni][nj] === board[i][j]) same++;
+                        const nr = r + dr, nc = c + dc;
+                        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === board[r][c]) {
+                            same++;
+                        }
                     }
                     if (same >= 1) potentialChainCount++;
                 }
             }
         }
 
-        // 3. 边缘大团奖励
+        // 3. 可扩展团奖励
+        let expandableGroupBonus = 0;
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                if (board[r][c] !== null) {
+                    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+                        const nr = r + dr, nc = c + dc;
+                        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === null) {
+                            // 统计空格邻居，如果点击能形成更大团，则有潜力
+                            const tempBoard = deepCopyBoard(board);
+                            tempBoard[nr][nc] = board[r][c];
+                            const newGroups = findAllConnectedGroups(tempBoard);
+                            for (const g of newGroups) {
+                                if (g.cells.some(cell => cell.r === r && cell.c === c)) {
+                                    expandableGroupBonus += 5;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. 边缘大团奖励
         let edgeGroupSize = 0;
-        for (let i = 0; i < BOARD_SIZE; i++) {
-            for (let j = 0; j < BOARD_SIZE; j++) {
-                if (board[i][j] !== null && (i === 0 || i === BOARD_SIZE - 1 || j === 0 || j === BOARD_SIZE - 1)) {
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                if (board[r][c] !== null && (r === 0 || r === BOARD_SIZE - 1 || c === 0 || c === BOARD_SIZE - 1)) {
                     let same = 0;
                     for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-                        const ni = i + dr, nj = j + dc;
-                        if (ni >= 0 && ni < BOARD_SIZE && nj >= 0 && nj < BOARD_SIZE && board[ni][nj] === board[i][j]) same++;
+                        const nr = r + dr, nc = c + dc;
+                        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === board[r][c]) {
+                            same++;
+                        }
                     }
                     if (same >= 1) edgeGroupSize++;
                 }
             }
         }
 
-        // 4. 孤立/死角惩罚
+        // 5. 孤立/死角惩罚（降低权重）
         let isolated = 0;
-        for (let r = 0; r < BOARD_SIZE; r++)
-            for (let c = 0; c < BOARD_SIZE; c++)
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
                 if (board[r][c] !== null) {
-                    let cnt = 0;
-                    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]])
-                        if (r + dr >= 0 && r + dr < BOARD_SIZE && c + dc >= 0 && c + dc < BOARD_SIZE && board[r + dr][c + dc] !== null)
-                            cnt++;
-                    if (cnt <= 1) isolated++;
-                }
+                    let hasSameValueNeighbor = false; // 标记是否有相同值的邻居
+                    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+                        const nr = r + dr;
+                        const nc = c + dc;
 
-        // 5. 分布均匀性
+                        // 检查邻居是否在棋盘内
+                        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                            // 检查邻居是否与当前格子值相同
+                            if (board[nr][nc] === board[r][c]) {
+                                hasSameValueNeighbor = true;
+                                break; // 找到一个相同值的邻居就足够了
+                            }
+                        }
+                    }
+                    // 如果没有相同值的邻居，则认为是孤立的
+                    if (!hasSameValueNeighbor) {
+                        isolated++;
+                    }
+                }
+            }
+        }
+
+        // 6. 分布均匀性（降低权重）
         let vals = board.flat().filter(v => v !== null);
-        let avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 1;
+        let avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 3;
         let variance = vals.length ? vals.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / vals.length : 0;
 
-        // 6. 空格奖励
+        // 7. 空格奖励
         let empty = board.flat().filter(v => v === null).length;
 
-        // 7. 优先消边角奖励
+        // 8. 优先消边角奖励
         let edgeClickBonus = 0;
         if (lastClick) {
             const { row, col } = lastClick;
-            // 四角奖励最大
             if ((row === 0 || row === BOARD_SIZE - 1) && (col === 0 || col === BOARD_SIZE - 1)) {
                 edgeClickBonus += 120;
             }
-            // 边缘奖励
             else if (row === 0 || row === BOARD_SIZE - 1 || col === 0 || col === BOARD_SIZE - 1) {
                 edgeClickBonus += 60;
             }
         }
 
-        // 8. 优先合大团奖励（如果本次点击能合成大团）
+        // 9. 优先合大团奖励
         let mergeBigGroupBonus = 0;
         if (lastClick) {
-            // 判断点击点是否属于大团
             for (const g of groups) {
-                if (g.cells.length >= 5 && g.cells.some(cell => cell.row === lastClick.row && cell.col === lastClick.col)) {
-                    mergeBigGroupBonus += 150 + (g.cells.length - 5) * 30; // 大团越大奖励越高
+                // 增加判断，避免访问空数组
+                if (!g.cells || g.cells.length === 0) continue;
+
+                if (g.cells.length >= 5 && g.cells.some(cell => cell.r === lastClick.row && cell.c === lastClick.col)) {
+                    mergeBigGroupBonus += 150 + (g.cells.length - 5) * 30;
                 }
             }
         }
 
         // ====== 权重微调 ======
-        return (
+        let conservativeScore =
             groupCount * 5 +
             maxGroupSize * 25 +
             bigGroupCount * 80 +
             edgeGroupSize * 10 +
             potentialChainCount * 12 +
+            expandableGroupBonus * 15 + // 新增：可扩展团奖励
             empty * 2 +
             edgeClickBonus +
             mergeBigGroupBonus
             - isolated * 40
-            - variance * 2
-        );
+            - variance * 2;
+
+        return conservativeScore;
     }
+
 
 
     // ====== 动态权重beamSearch ======
@@ -307,6 +356,7 @@
 
                                 let scoreGain = sim.totalScore;
                                 let conservativeScore = evaluateBoardConservative(sim.board, node.score + scoreGain, { row: i, col: j });
+
 
                                 // 允许高分段scoreGain=0但布局评分极高的动作
                                 if (scoreGain <= 0 && conservativeScore < 1000) continue;
@@ -348,9 +398,9 @@
 
     // ====== 其它辅助函数 ======
     function getCurrentPhase(score) {
-        if (score >= 1800) return { threshold: 1800, maxClicks: 1, riskFactor: 0.2 };
-        if (score >= 1200) return { threshold: 1200, maxClicks: 2, riskFactor: 0.4 };
-        if (score >= 500) return { threshold: 500, maxClicks: 2, riskFactor: 0.7 };
+        if (score >= 2000) return { threshold: 2000, maxClicks: 1, riskFactor: 0.2 };
+        if (score >= 1500) return { threshold: 1500, maxClicks: 2, riskFactor: 0.4 };
+        if (score >= 800) return { threshold: 800, maxClicks: 2, riskFactor: 0.7 };
         return { threshold: 0, maxClicks: 2, riskFactor: 1.0 };
     }
 
@@ -659,10 +709,10 @@
         updateStatus('未运行 (监控中)');
         log('保守型脚本加载完成，目标突破2000分！');
         log('策略说明：');
-        log('- 0-499分：激进策略，最多2连击');
-        log('- 500-1199分：平衡策略，最多1连击');
-        log('- 1200-1799分：保守策略，严控风险');
-        log('- 1800分以上：极保守，只做确定连锁');
+        log('- 0-800分：激进策略，最多2连击');
+        log('- 800-1500分：平衡策略，最多1连击');
+        log('- 1500-2000分：保守策略，严控风险');
+        log('- 2000分以上：极保守，只做确定连锁');
         monitorGameState();
     }
     if (document.readyState === 'loading') {
