@@ -21,7 +21,7 @@
 ## 核心算法
 
 1. **Beam Search 算法**：
-   - 使用宽度为8的beam search进行多步前瞻（SEARCH_DEPTH=4）
+   - 使用beam search进行多步前瞻
    - 结合得分和布局评估进行综合决策
 
 2. **动态权重系统**：
