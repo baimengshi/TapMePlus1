@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         TapMePlus1 自动通关（高分保守优化）v7.1
+// @name         TapMePlus1 自动通关（高分优化版）
 // @namespace    http://tampermonkey.net/
-// @version      7.1
-// @description  自动通关脚本，动态权重布局评分，目标突破2000分
-// @author       泡小胡呢
+// @version      7.2
+// @description  自动通关脚本，动态权重布局评分，目标突破3000分（包含错误处理、性能优化和算法增强）
+// @author       baimengshi
 // @match        https://tapmeplus1.com/*
 // @grant        none
 // ==/UserScript==
@@ -20,37 +20,60 @@
     const SEARCH_DEPTH = 4;
     const MIN_CLICK_DELAY = 60;
     const BASE_CLICK_DELAY = 100;
+    const evaluationCache = new Map(); // 评估缓存
 
     // ====== 动态权重函数 ======
     function getScoreWeight(score) {
         if (score < 800) return { score: 100, layout: 1 };
-        if (score < 1500) return { score: 85, layout: 0.8 }; // 提高布局权重
-        if (score < 2000) return { score: 70, layout: 0.6 }; // 新增2000分过渡阶段
-        return { score: 60, layout: 0.4 }; // 2000分以上保留部分布局权重
+        if (score < 1500) return { score: 85, layout: 0.8 };
+        if (score < 2000) return { score: 70, layout: 0.6 };
+        return { score: 60, layout: 0.4 };
     }
 
     // ====== 工具函数 ======
     function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
     function deepCopyBoard(board) {
         if (!board) return null;
         return board.map(row => row.slice());
     }
 
-    // ====== DOM读取 ======
+    // ====== 棋盘状态获取（增强版） ======
     function getBoardFromDOM() {
-        const board = Array(BOARD_SIZE).fill(0).map(() => Array(BOARD_SIZE).fill(null));
-        const cells = document.querySelectorAll('#game-board .cell:not(.empty)'); // 排除空单元格
+        try {
+            const board = Array(BOARD_SIZE).fill(0).map(() => Array(BOARD_SIZE).fill(null));
+            const cells = document.querySelectorAll('#game-board .cell:not(.empty)');
 
-        cells.forEach(cell => {
-            const row = parseInt(cell.dataset.row);
-            const col = parseInt(cell.dataset.col);
-            const val = parseInt(cell.textContent.trim()); // 使用textContent替代data-value
-
-            if (!isNaN(val) && row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
-                board[row][col] = val;
+            if (cells.length === 0) {
+                throw new Error('未找到有效的游戏格子');
             }
-        });
-        return board;
+
+            let validCells = 0;
+            cells.forEach(cell => {
+                const row = parseInt(cell.dataset.row);
+                const col = parseInt(cell.dataset.col);
+                const val = parseInt(cell.textContent.trim());
+
+                if (isNaN(row) || isNaN(col) || isNaN(val)) {
+                    log(`无效的格子数据: row=${cell.dataset.row}, col=${cell.dataset.col}, val=${cell.textContent}`, 'warn');
+                    return;
+                }
+
+                if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
+                    board[row][col] = val;
+                    validCells++;
+                }
+            });
+
+            if (validCells === 0) {
+                throw new Error('所有格子数据无效');
+            }
+
+            return board;
+        } catch (error) {
+            log(`获取棋盘状态失败: ${error.message}`, 'error');
+            return null;
+        }
     }
 
     function getClicksLeftFromDOM() {
@@ -59,6 +82,7 @@
         const val = parseInt(el.textContent);
         return isNaN(val) ? 0 : val;
     }
+
     function getScoreFromDOM() {
         const scoreEl = document.querySelector('.score-display');
         if (!scoreEl) return 0;
@@ -72,6 +96,7 @@
         const size = board.length;
         const visited = Array(size).fill(0).map(() => Array(size).fill(false));
         const groups = [];
+
         for (let i = 0; i < size; i++) {
             for (let j = 0; j < size; j++) {
                 if (!visited[i][j] && board[i][j] !== null) {
@@ -79,9 +104,11 @@
                     const queue = [{ r: i, c: j }];
                     visited[i][j] = true;
                     const currentGroup = [];
+
                     while (queue.length) {
                         const { r, c } = queue.shift();
                         currentGroup.push({ r, c });
+
                         const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
                         for (const [dr, dc] of directions) {
                             const nr = r + dr, nc = c + dc;
@@ -92,14 +119,18 @@
                             }
                         }
                     }
-                    if (currentGroup.length >= 3) groups.push({ cells: currentGroup, value: val });
+
+                    if (currentGroup.length >= 3) {
+                        groups.push({ cells: currentGroup, value: val });
+                    }
                 }
             }
         }
+
         return groups;
     }
 
-    // ====== 重力模拟 ======
+    // ====== 重力模拟（优化版） ======
     function applyGravitySim(board) {
         const size = board.length;
         let hasMovedOrFilled = false;
@@ -108,39 +139,29 @@
         for (let col = 0; col < size; col++) {
             let emptyRow = size - 1;
 
-            // 从底部向上移动格子
             for (let row = size - 1; row >= 0; row--) {
                 if (board[row][col] !== null) {
-                    // 确保位置有效
-                    if (row !== emptyRow &&
-                        emptyRow >= 0 && emptyRow < size) {
-                        board[emptyRow][col] = board[row][col];
-                        board[row][col] = null;
+                    if (row !== emptyRow) {
+                        [board[emptyRow][col], board[row][col]] = [board[row][col], null];
                         hasMovedOrFilled = true;
                     }
 
-                    // 确保 emptyRow 不会越界
                     if (emptyRow > 0) {
                         emptyRow--;
                     }
                 }
             }
 
-            // 填充空白格子
             while (emptyRow >= 0) {
-                // 确保位置有效
-                if (emptyRow >= 0 && emptyRow < size) {
-                    board[emptyRow][col] = Math.floor(Math.random() * 5) + 1;
-                    hasMovedOrFilled = true;
-                    emptyCellsCreated++;
-                }
+                board[emptyRow][col] = (Math.random() * 5 | 0) + 1;
+                hasMovedOrFilled = true;
+                emptyCellsCreated++;
                 emptyRow--;
             }
         }
 
         return { hasMovedOrFilled, emptyCellsCreated };
     }
-
 
     // ====== 模拟消除 ======
     function simulateElimination(board, initialClicksLeft) {
@@ -151,7 +172,6 @@
         let totalEmptyCellsCreated = 0;
         const simBoard = deepCopyBoard(board);
 
-        // 初始化最大数值
         for (let r = 0; r < BOARD_SIZE; r++) {
             for (let c = 0; c < BOARD_SIZE; c++) {
                 if (simBoard[r][c] !== null && simBoard[r][c] > maxNumberInGame) {
@@ -165,9 +185,7 @@
             if (groups.length === 0) break;
             chainCount++;
 
-            // 修复：确保在访问前初始化 baseValue
             for (const group of groups) {
-                // 1. 找到目标格子（保留的格子）
                 let target = group.cells[0];
                 for (const cell of group.cells) {
                     if (cell.r > target.r || (cell.r === target.r && cell.c < target.c)) {
@@ -175,49 +193,33 @@
                     }
                 }
 
-                // 2. 确保目标格子有效
-                if (target.r < 0 || target.r >= BOARD_SIZE ||
-                    target.c < 0 || target.c >= BOARD_SIZE) {
+                if (target.r < 0 || target.r >= BOARD_SIZE || target.c < 0 || target.c >= BOARD_SIZE) {
                     console.error('无效的目标格子:', target);
                     continue;
                 }
 
-                // 3. 获取基础值（确保在访问前初始化）
                 const baseValue = simBoard[target.r][target.c];
+                const cellsToClear = group.cells.filter(c => !(c.r === target.r && c.c === target.c));
 
-                // 4. 确定要清除的格子（除目标外的所有格子）
-                const cellsToClear = group.cells.filter(c =>
-                    !(c.r === target.r && c.c === target.c)
-                );
-
-                // 5. 计算得分
                 totalScore += baseValue * cellsToClear.length;
 
-                // 6. 清除格子
                 for (const c of cellsToClear) {
-                    if (c.r >= 0 && c.r < BOARD_SIZE &&
-                        c.c >= 0 && c.c < BOARD_SIZE) {
+                    if (c.r >= 0 && c.r < BOARD_SIZE && c.c >= 0 && c.c < BOARD_SIZE) {
                         simBoard[c.r][c.c] = null;
                     }
                 }
 
-                // 7. 增加目标格子的值
                 simBoard[target.r][target.c] = baseValue + 1;
-
-                // 8. 更新最大数值
                 if (simBoard[target.r][target.c] > maxNumberInGame) {
                     maxNumberInGame = simBoard[target.r][target.c];
                 }
 
-                // 9. 恢复点击次数
                 currentClicksLeft = Math.min(currentClicksLeft + 1, MAX_CLICKS);
             }
 
-            // 应用重力效果
             const gravityResult = applyGravitySim(simBoard);
             totalEmptyCellsCreated += gravityResult.emptyCellsCreated;
 
-            // 检查是否结束
             if (!gravityResult.hasMovedOrFilled && findAllConnectedGroups(simBoard).length === 0) {
                 break;
             }
@@ -233,13 +235,18 @@
         };
     }
 
-
-    // ====== 布局评分优化 ======
+    // ====== 布局评分（带缓存） ======
     function evaluateBoardConservative(board, currentScore, lastClick) {
-        // 1. 最大团奖励
+        const cacheKey = JSON.stringify(board) + currentScore + (lastClick ? `${lastClick.row},${lastClick.col}` : '');
+
+        if (evaluationCache.has(cacheKey)) {
+            return evaluationCache.get(cacheKey);
+        }
+
         const groups = findAllConnectedGroups(board);
         let maxGroupSize = 0, groupCount = 0;
         let bigGroupCount = 0;
+
         for (const g of groups) {
             if (!g.cells || g.cells.length === 0) continue;
             groupCount++;
@@ -247,7 +254,6 @@
             if (g.cells.length >= 5) bigGroupCount++;
         }
 
-        // 2. 潜在连锁奖励
         let potentialChainCount = 0;
         for (let r = 0; r < BOARD_SIZE; r++) {
             for (let c = 0; c < BOARD_SIZE; c++) {
@@ -262,7 +268,6 @@
             }
         }
 
-        // 3. 可扩展团奖励
         let expandableGroupBonus = 0;
         for (let r = 0; r < BOARD_SIZE; r++) {
             for (let c = 0; c < BOARD_SIZE; c++) {
@@ -285,7 +290,6 @@
             }
         }
 
-        // 4. 边缘大团奖励
         let edgeGroupSize = 0;
         for (let r = 0; r < BOARD_SIZE; r++) {
             for (let c = 0; c < BOARD_SIZE; c++) {
@@ -300,7 +304,6 @@
             }
         }
 
-        // 5. 孤立/死角惩罚
         let isolated = 0;
         for (let r = 0; r < BOARD_SIZE; r++) {
             for (let c = 0; c < BOARD_SIZE; c++) {
@@ -320,15 +323,12 @@
             }
         }
 
-        // 6. 分布均匀性
         let vals = board.flat().filter(v => v !== null);
         let avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 3;
         let variance = vals.length ? vals.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / vals.length : 0;
 
-        // 7. 空格奖励
         let empty = board.flat().filter(v => v === null).length;
 
-        // 8. 优先消边角奖励
         let edgeClickBonus = 0;
         if (lastClick) {
             const { row, col } = lastClick;
@@ -340,7 +340,6 @@
             }
         }
 
-        // 9. 优先合大团奖励
         let mergeBigGroupBonus = 0;
         if (lastClick) {
             for (const g of groups) {
@@ -351,9 +350,6 @@
             }
         }
 
-        // 10. 潜在连锁价值
-        let chainPotential = 0;
-        // 直接实现颜色分组统计
         const colorCounts = {};
         for (let r = 0; r < BOARD_SIZE; r++) {
             for (let c = 0; c < BOARD_SIZE; c++) {
@@ -364,14 +360,13 @@
             }
         }
 
-        // 分析颜色分布
+        let chainPotential = 0;
         for (const color in colorCounts) {
             const count = colorCounts[color];
-            if (count >= 4) chainPotential += 20; // 4个以上同色块
-            if (count >= 6) chainPotential += 40; // 6个以上额外奖励
+            if (count >= 4) chainPotential += 20;
+            if (count >= 6) chainPotential += 40;
         }
 
-        // ====== 权重再降 ======
         let conservativeScore =
             groupCount * 2 +
             maxGroupSize * 8 +
@@ -382,19 +377,105 @@
             empty * 1 +
             edgeClickBonus +
             mergeBigGroupBonus +
-            chainPotential * 0.8 + // 添加连锁潜力
+            chainPotential * 0.8 +
             -isolated * 2 +
             -variance * 0.2;
+
+        evaluationCache.set(cacheKey, conservativeScore);
+        if (evaluationCache.size > 1000) {
+            const keys = Array.from(evaluationCache.keys());
+            for (let i = 0; i < 100; i++) {
+                evaluationCache.delete(keys[i]);
+            }
+        }
 
         return conservativeScore;
     }
 
+    // ====== 阶段策略 ======
+    function getCurrentPhase(score) {
+        if (score >= 2000) return {
+            maxClicks: 2,
+            riskFactor: 0.2,
+            label: '2000+',
+            strategy: 'focusLargeGroups'
+        };
+        if (score >= 1800) return {
+            maxClicks: 2,
+            riskFactor: 0.3,
+            label: '1800+',
+            strategy: 'balanceEdgeAndCenter'
+        };
+        if (score >= 1500) return {
+            maxClicks: 3,
+            riskFactor: 0.4,
+            label: '1500+',
+            strategy: 'maximizeChainPotential'
+        };
+        if (score >= 1000) return {
+            maxClicks: 2,
+            riskFactor: 0.7,
+            label: '1000+',
+            strategy: 'conservativeGrowth'
+        };
+        return {
+            maxClicks: 3,
+            riskFactor: 1.0,
+            label: '基础',
+            strategy: 'default'
+        };
+    }
 
-    // ====== 动态权重beamSearch ======
+    // ====== 光束搜索（优化版） ======
     function conservativeBeamSearch(board, clicksLeft, scoreNow) {
         const phase = getCurrentPhase(scoreNow);
         const weights = getScoreWeight(scoreNow);
 
+        // 根据策略调整权重
+        let strategyWeights = { score: weights.score, layout: weights.layout };
+
+        switch (phase.strategy) {
+            case 'focusLargeGroups':
+                strategyWeights.layout *= 1.5;
+                break;
+            case 'balanceEdgeAndCenter':
+                strategyWeights.score *= 1.2;
+                break;
+            case 'maximizeChainPotential':
+                strategyWeights.score *= 1.5;
+                break;
+            case 'conservativeGrowth':
+                strategyWeights.layout *= 1.2;
+                break;
+        }
+
+        // 终局检测 - 当剩余行动点不多时
+        if (clicksLeft <= 2) {
+            // 寻找能直接产生最大得分的移动
+            let bestEmergencyMove = null;
+            let maxEmergencyScore = -Infinity;
+
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                for (let j = 0; j < BOARD_SIZE; j++) {
+                    if (board[i][j] !== null) {
+                        // 尝试1次点击
+                        const tempBoard = deepCopyBoard(board);
+                        tempBoard[i][j]++;
+                        const sim = simulateElimination(tempBoard, clicksLeft - 1);
+
+                        if (sim.totalScore > maxEmergencyScore) {
+                            maxEmergencyScore = sim.totalScore;
+                            bestEmergencyMove = { row: i, col: j, times: 1 };
+                        }
+                    }
+                }
+            }
+
+            if (bestEmergencyMove && maxEmergencyScore > 0) {
+                log(`终局策略: 选择直接得分最高的移动 (${bestEmergencyMove.row},${bestEmergencyMove.col})`, 'info');
+                return bestEmergencyMove;
+            }
+        }
         let root = {
             board: deepCopyBoard(board),
             clicksLeft: clicksLeft,
@@ -414,23 +495,35 @@
                         if (currentNode.board[i][j] !== null) {
                             const maxClicksForPhase = Math.min(currentNode.clicksLeft, phase.maxClicks);
                             for (let times = 1; times <= maxClicksForPhase; times++) {
+                                // 添加验证步骤
+                                if (isNaN(currentNode.board[i][j])) {
+                                    log(`发现无效的棋盘值 at (${i},${j}): ${currentNode.board[i][j]}`, 'warn');
+                                    continue;
+                                }
+
                                 let boardAfter = deepCopyBoard(currentNode.board);
                                 for (let k = 0; k < times; k++) boardAfter[i][j]++;
+
                                 let clicksLeftAfter = currentNode.clicksLeft - times;
                                 let sim = simulateElimination(boardAfter, clicksLeftAfter);
 
-                                let scoreGain = sim.totalScore;
+                                // 确保分数是有效数字
+                                let scoreGain = isNaN(sim.totalScore) ? 0 : sim.totalScore;
                                 let conservativeScore = evaluateBoardConservative(sim.board, currentNode.score + scoreGain, { row: i, col: j });
 
-                                // 1500分以上，只要scoreGain>0就允许点击
-                                if (scoreNow >= 1500) {
-                                    if (scoreGain <= 0) continue;
-                                } else {
-                                    // 低分段允许scoreGain=0但布局分极高的动作
-                                    if (scoreGain <= 0 && conservativeScore < 1000) continue;
+                                // 确保评分是有效数字
+                                if (isNaN(conservativeScore)) {
+                                    log(`计算布局评分失败 at (${i},${j})`, 'warn');
+                                    conservativeScore = 0;
                                 }
 
-                                let value = scoreGain * weights.score + conservativeScore * weights.layout;
+                                let value = scoreGain * strategyWeights.score + conservativeScore * strategyWeights.layout;
+
+                                // 确保综合评分有效
+                                if (isNaN(value)) {
+                                    log(`计算综合评分失败 at (${i},${j})`, 'warn');
+                                    value = 0;
+                                }
 
                                 let newNode = {
                                     board: deepCopyBoard(sim.board),
@@ -511,18 +604,6 @@
             scoreGain: bestLeaf.scoreGain,
             conservativeScore: bestLeaf.conservativeScore
         };
-
-    }
-
-
-    // ====== 其它辅助函数 ======
-    function getCurrentPhase(score) {
-        // 给每个阶段添加label标识
-        if (score >= 2000) return { maxClicks: 2, riskFactor: 0.2, label: '2000+' };
-        if (score >= 1800) return { maxClicks: 2, riskFactor: 0.3, label: '1800+' };
-        if (score >= 1500) return { maxClicks: 3, riskFactor: 0.4, label: '1500+' };
-        if (score >= 1000) return { maxClicks: 2, riskFactor: 0.7, label: '1000+' };
-        return { maxClicks: 3, riskFactor: 1.0, label: '基础' };
     }
 
     // ====== 动画等待 ======
@@ -539,16 +620,16 @@
             }
             await sleep(interval);
         }
-        log('警告：动画等待超时，强制继续');
-        return false; // 超时后继续流程
+        log('警告：动画等待超时，强制继续', 'warn');
+        return false;
     }
-
 
     // ====== 游戏结束检测 ======
     function isGameEndModalVisible() {
         const modal = document.getElementById('game-end-modal');
         return modal && modal.classList.contains('show');
     }
+
     function handleGameEndModal() {
         const restartButton = document.getElementById('modal-restart-btn');
         if (restartButton) {
@@ -567,12 +648,16 @@
         if (controlPanel) {
             pauseBtn.disabled = false;
             startBtn.disabled = true;
+            updateStatusIndicator('running');
         }
+
         while (running && !stopRequested) {
             if (paused) {
+                updateStatusIndicator('paused');
                 await sleep(500);
                 continue;
             }
+
             if (isGameEndModalVisible()) {
                 if (handleGameEndModal()) {
                     log('游戏结束弹框已处理，等待游戏重启...');
@@ -581,14 +666,17 @@
                     continue;
                 }
             }
+
             const clicksLeft = getClicksLeftFromDOM();
             const scoreNow = getScoreFromDOM();
             const currentBoard = getBoardFromDOM();
+
             if (!currentBoard) {
                 log('无法获取棋盘状态，等待...');
                 await sleep(1000);
                 continue;
             }
+
             if (clicksLeft <= 0) {
                 log('行动点用尽，等待连锁反应或游戏结束...');
                 await waitForAnimationToFinish(20000);
@@ -610,6 +698,7 @@
                 running = false;
                 break;
             }
+
             const phase = getCurrentPhase(scoreNow);
             log(`[阶段${phase.label}] 点击格子 (${bestMove.row},${bestMove.col}) x${bestMove.times}, ` +
                 `预计实际得分: ${bestMove.scoreGain}, ` +
@@ -619,45 +708,55 @@
 
             const cell = document.querySelector(`.cell[data-row="${bestMove.row}"][data-col="${bestMove.col}"]`);
             if (!cell) {
-                log(`错误：未找到DOM格子 (${bestMove.row},${bestMove.col})，停止运行。`);
+                log(`错误：未找到DOM格子 (${bestMove.row},${bestMove.col})，停止运行。`, 'error');
                 running = false;
                 break;
             }
+
             let delay = BASE_CLICK_DELAY;
             if (scoreNow >= 1500) delay = MIN_CLICK_DELAY + 40;
             else if (scoreNow >= 1000) delay = MIN_CLICK_DELAY + 20;
             else if (clicksLeft <= 2) delay = MIN_CLICK_DELAY;
+
             for (let k = 0; k < bestMove.times; k++) {
                 cell.click();
-                await sleep(delay);
+                cell.style.transform = 'scale(1)';
+                await sleep(delay - 30);
             }
             await waitForAnimationToFinish();
         }
+
         if (controlPanel) {
             pauseBtn.disabled = true;
             startBtn.disabled = false;
             updateStatus(stopRequested ? '已重置/停止' : '已停止');
+            updateStatusIndicator(stopRequested ? 'stopped' : 'stopped');
         }
         log('自动点击循环结束。');
     }
 
     // ====== 监控游戏状态 ======
     let monitoring = false;
+
     async function monitorGameState() {
         if (monitoring) return;
         monitoring = true;
         log('进入后台监控状态，等待可用操作或游戏开始...');
+
         while (true) {
             if (stopRequested) {
                 monitoring = false;
                 log("监控已停止 (用户重置).");
                 updateStatus('已重置/停止.');
+                updateStatusIndicator('stopped');
                 return;
             }
+
             if (paused || running) {
                 await sleep(2000);
                 continue;
             }
+
             if (isGameEndModalVisible()) {
                 if (handleGameEndModal()) {
                     log('监控：游戏结束弹框已处理，等待游戏重启...');
@@ -665,16 +764,20 @@
                     continue;
                 }
             }
+
             const currentBoard = getBoardFromDOM();
             const clicksLeft = getClicksLeftFromDOM();
             const score = getScoreFromDOM();
+
             if (currentBoard && clicksLeft > 0 && !running && !paused && !stopRequested) {
                 log(`监控：检测到可用操作 (分数: ${score})，自动启动保守策略。`);
                 running = true;
                 paused = false;
                 updateStatus('运行中');
+                updateStatusIndicator('running');
                 autoClickLoop();
             }
+
             await sleep(2500);
         }
     }
@@ -682,6 +785,7 @@
     // ====== UI和控制面板 ======
     function createControlPanel() {
         if (document.getElementById('autoTapmeControlPanel')) return;
+
         controlPanel = document.createElement('div');
         controlPanel.id = 'autoTapmeControlPanel';
         Object.assign(controlPanel.style, {
@@ -690,8 +794,9 @@
             fontFamily: 'monospace', padding: '12px', borderRadius: '8px', zIndex: '99999',
             boxShadow: '0 0 15px rgba(0,0,0,0.5)', userSelect: 'none', transition: 'opacity 0.3s ease-in-out'
         });
+
         const title = document.createElement('div');
-        title.textContent = 'TapMePlus1 自动通关（高分保守优化）v7.1';
+        title.textContent = 'TapMePlus1 自动通关 v7.2';
         title.style.fontWeight = 'bold';
         title.style.marginBottom = '10px';
         title.style.fontSize = '16px';
@@ -704,6 +809,16 @@
         statusDiv.textContent = '状态：未运行';
         statusDiv.style.color = '#bbb';
         controlPanel.appendChild(statusDiv);
+
+        // 添加状态指示器
+        const statusIndicator = document.createElement('div');
+        statusIndicator.id = 'statusIndicator';
+        statusIndicator.style.height = '5px';
+        statusIndicator.style.borderRadius = '5px';
+        statusIndicator.style.margin = '5px 0';
+        statusIndicator.style.transition = 'background-color 0.3s';
+        statusIndicator.style.backgroundColor = '#9E9E9E';
+        controlPanel.appendChild(statusIndicator);
 
         const btnContainer = document.createElement('div');
         btnContainer.style.marginBottom = '10px';
@@ -720,11 +835,15 @@
         startBtn.onmouseout = () => startBtn.style.backgroundColor = '#4CAF50';
         startBtn.onclick = () => {
             if (!running) {
-                running = true; paused = false; stopRequested = false;
+                running = true;
+                paused = false;
+                stopRequested = false;
                 updateStatus('运行中');
+                updateStatusIndicator('running');
                 log('开始自动通关');
                 autoClickLoop();
-                pauseBtn.disabled = false; startBtn.disabled = true;
+                pauseBtn.disabled = false;
+                startBtn.disabled = true;
             }
         };
         btnContainer.appendChild(startBtn);
@@ -744,6 +863,7 @@
             paused = !paused;
             pauseBtn.textContent = paused ? '继续' : '暂停';
             updateStatus(paused ? '已暂停' : (running ? '运行中' : '已停止'));
+            updateStatusIndicator(paused ? 'paused' : (running ? 'running' : 'stopped'));
             log(paused ? '已暂停' : '已继续');
         };
         btnContainer.appendChild(pauseBtn);
@@ -758,10 +878,15 @@
         resetBtn.onmouseover = () => resetBtn.style.backgroundColor = '#d32f2f';
         resetBtn.onmouseout = () => resetBtn.style.backgroundColor = '#f44336';
         resetBtn.onclick = () => {
-            running = false; paused = false; stopRequested = true;
+            running = false;
+            paused = false;
+            stopRequested = true;
             updateStatus('已重置/停止');
+            updateStatusIndicator('stopped');
             log('已重置，停止自动通关');
-            pauseBtn.textContent = '暂停'; pauseBtn.disabled = true; startBtn.disabled = false;
+            pauseBtn.textContent = '暂停';
+            pauseBtn.disabled = true;
+            startBtn.disabled = false;
         };
         btnContainer.appendChild(resetBtn);
 
@@ -809,6 +934,21 @@
         document.body.appendChild(controlPanel);
     }
 
+    // ====== 状态指示器更新 ======
+    function updateStatusIndicator(status) {
+        const indicator = document.getElementById('statusIndicator');
+        if (!indicator) return;
+
+        const colors = {
+            running: '#4CAF50',
+            paused: '#FFC107',
+            stopped: '#F44336',
+            error: '#9C27B0'
+        };
+
+        indicator.style.backgroundColor = colors[status] || '#9E9E9E';
+    }
+
     // ====== 日志与状态 ======
     function updateStatus(text) {
         if (statusDiv) statusDiv.textContent = '状态：' + text;
@@ -817,34 +957,46 @@
     function log(msg, level = 'info') {
         if (!logArea) return;
 
-        // 修复：添加时间变量定义
         const time = new Date().toLocaleTimeString();
-
-        // 添加日志级别颜色
         const colors = {
             error: '#ff6b6b',
             warn: '#ffd166',
             info: '#a9d6e5',
-            success: '#06d6a0'
+            success: '#06d6a0',
+            debug: '#adb5bd'
         };
 
-        // 创建带样式的日志条目
         const logEntry = document.createElement('div');
         logEntry.textContent = `[${time}] ${msg}`;
         logEntry.style.color = colors[level] || '#f8f9fa';
         logEntry.style.margin = '2px 0';
+        logEntry.style.padding = '2px 5px';
+
+        if (level === 'error') {
+            logEntry.style.backgroundColor = 'rgba(255, 107, 107, 0.1)';
+        } else if (level === 'warn') {
+            logEntry.style.backgroundColor = 'rgba(255, 209, 102, 0.1)';
+        }
+
+        logEntry.style.cursor = 'pointer';
+        logEntry.onclick = () => {
+            navigator.clipboard.writeText(msg);
+            logEntry.style.backgroundColor = 'rgba(0, 123, 255, 0.2)';
+            setTimeout(() => {
+                logEntry.style.backgroundColor = level === 'error' ?
+                    'rgba(255, 107, 107, 0.1)' :
+                    level === 'warn' ? 'rgba(255, 209, 102, 0.1)' : 'transparent';
+            }, 500);
+        };
 
         logArea.appendChild(logEntry);
         logArea.scrollTop = logArea.scrollHeight;
-
-        // 控制台日志保持不变
         console.log(`[AutoTapmePlus1] ${msg}`);
     }
 
     function exportLog() {
         if (!logArea) return;
 
-        // 收集所有日志文本
         let logText = '';
         for (const child of logArea.children) {
             logText += child.textContent + '\n';
@@ -863,18 +1015,15 @@
         log('日志已导出', 'success');
     }
 
-
     // ====== 初始化 ======
     function init() {
         createControlPanel();
         updateStatus('未运行 (监控中)');
-        // 在代码中使用不同日志级别
-        log('保守型脚本加载完成，目标突破3000分！', 'success');
-        log('警告：等待动画完成超时', 'warn');
-        log('错误：未找到DOM格子', 'error');
-        log('常规信息消息', 'info'); // 默认级别
+        updateStatusIndicator('stopped');
+        log('TapMePlus1 自动通关脚本(优化版)加载完成，目标突破3000分！', 'success');
         monitorGameState();
     }
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
