@@ -30,11 +30,20 @@
 脚本包含以下可调整参数（在代码中修改）:
 
 ```javascript
-    function getCurrentPhase(score) {
-        if (score >= 1800) return { threshold: 1800, maxClicks: 1, riskFactor: 0.2 };
-        if (score >= 1200) return { threshold: 1200, maxClicks: 1, riskFactor: 0.4 };
-        if (score >= 500) return { threshold: 500, maxClicks: 1, riskFactor: 0.7 };
-        return { threshold: 0, maxClicks: 2, riskFactor: 1.0 };
+    // ====== 基本参数 ======
+    const BOARD_SIZE = 5;
+    const MAX_CLICKS = 5;
+    const BEAM_WIDTH = 8;
+    const SEARCH_DEPTH = 4;
+    const MIN_CLICK_DELAY = 60;
+    const BASE_CLICK_DELAY = 100;
+
+    // ====== 动态权重函数 ======
+    function getScoreWeight(score) {
+        if (score < 800) return { score: 100, layout: 1 };
+        if (score < 1500) return { score: 85, layout: 0.8 }; // 提高布局权重
+        if (score < 2000) return { score: 70, layout: 0.6 }; // 新增2000分过渡阶段
+        return { score: 60, layout: 0.4 }; // 2000分以上保留部分布局权重
     }
 ```
 ## 工作原理
