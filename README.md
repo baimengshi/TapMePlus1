@@ -52,6 +52,40 @@
         if (score < 2000) return { score: 70, layout: 0.6 }; // 新增2000分过渡阶段
         return { score: 60, layout: 0.4 }; // 2000分以上保留部分布局权重
     }
+
+    // ====== 阶段策略 ======
+    function getCurrentPhase(score) {
+        if (score >= 2000) return {
+            maxClicks: 2,
+            riskFactor: 0.2,
+            label: '2000+',
+            strategy: 'focusLargeGroups'
+        };
+        if (score >= 1800) return {
+            maxClicks: 2,
+            riskFactor: 0.3,
+            label: '1800+',
+            strategy: 'balanceEdgeAndCenter'
+        };
+        if (score >= 1500) return {
+            maxClicks: 3,
+            riskFactor: 0.4,
+            label: '1500+',
+            strategy: 'maximizeChainPotential'
+        };
+        if (score >= 1000) return {
+            maxClicks: 2,
+            riskFactor: 0.7,
+            label: '1000+',
+            strategy: 'conservativeGrowth'
+        };
+        return {
+            maxClicks: 3,
+            riskFactor: 1.0,
+            label: '基础',
+            strategy: 'default'
+        };
+    }
 ```
 ## 关键组件
 1. **游戏状态读取**：
