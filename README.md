@@ -30,6 +30,8 @@
     const SEARCH_DEPTH = 4;
     const MIN_CLICK_DELAY = 60;
     const BASE_CLICK_DELAY = 100;
+    const evaluationCache = new Map(); // 评估缓存
+    const MAX_CACHE_SIZE = 500; // 添加缓存大小限制
 
     // ====== 动态权重函数 ======
     function getScoreWeight(score) {
