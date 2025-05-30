@@ -14,7 +14,7 @@
 
 ## 安装说明
 
-1. 安装 [Tampermonkey](https://www.tampermonkey.net/) 浏览器扩展
+1. 安装 [violentmonkey](https://violentmonkey.github.io/) 浏览器扩展
 2. 点击安装 [油猴脚本](https://github.com/baimengshi/tapmeplus1/raw/main/tapmeplus1-autoplay.user.js)
 3. 访问 [TapMePlus1](https://tapmeplus1.com/) 开始游戏
 
