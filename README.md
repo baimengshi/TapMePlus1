@@ -1,80 +1,92 @@
-# TapMePlus1 自动通关脚本
+# TapMePlus1 Auto-Clearing Script
 
-一款强大的 Greasemonkey 用户脚本，用于自动化 TapMePlus1 游戏的通关过程。
+A powerful Greasemonkey userscript for automating the process of clearing the TapMePlus1 game.
 
-## 功能特性
+## Features
 
-- 🎮 **全自动游戏**：自动判断最优点击策略
-- ⚡ **智能决策**：基于价值函数评估每个点击的潜在收益
-- 🔁 **连锁反应处理**：完整模拟连锁消除效果
-- 🚀 **高效算法**：支持多点击连续操作策略
-- 🛠 **破局模式**：在不利局面下寻找最佳突破点
-- 📊 **实时监控**：后台监控游戏状态，自动重启游戏
-- 🖥 **控制面板**：直观的GUI界面控制脚本运行
+- 🎮 **Fully automatic game**: Automatically determine the optimal click strategy
+- ⚡ **Intelligent decision**: Evaluate the potential benefits of each click based on the value function
+- 🔁 **Chain reaction processing**: Completely simulate the chain elimination effect
+- 🚀 **Efficient algorithm**: Support multi-click continuous operation strategy
+- 🛠 **Breakthrough mode**: Find the best breakthrough point in an unfavorable situation
+- 📊 **Real-time monitoring**: Monitor the game status in the background and automatically restart the game
+- 🖥 **Control panel**: Intuitive GUI interface to control script operation
 
-## 安装说明
+## Installation instructions
 
-1. 安装 [violentmonkey](https://violentmonkey.github.io/) 浏览器扩展
-2. 点击安装 [油猴脚本](https://github.com/baimengshi/tapmeplus1/raw/main/TapMePlus1_auto-clear.user.js)
-3. 访问 [TapMePlus1](https://tapmeplus1.com/) 开始游戏
+1. Install the [violentmonkey](https://violentmonkey.github.io/) browser extension
+2. Click to install the [TapmePlus1 script](https://github.com/baimengshi/tapmeplus1/raw/main/TapMePlus1_auto-clear.user.js)
+3. Visit [TapMePlus1](https://tapmeplus1.com/) Start the game
 
-## 配置选项
+## Configuration options
 
-脚本包含以下可调整参数（在代码中修改）:
+The script contains the following adjustable parameters (modify in code):
 
 ```javascript
-    // ====== 基本参数 ======
-    const BOARD_SIZE = 5;
-    const MAX_CLICKS = 5;
-    const BEAM_WIDTH = 8;
-    const SEARCH_DEPTH = 4;
-    const MIN_CLICK_DELAY = 60;
-    const BASE_CLICK_DELAY = 100;
-    const evaluationCache = new Map(); // 评估缓存
-    const MAX_CACHE_SIZE = 500; // 添加缓存大小限制
+// ====== Basic parameters ======
+const BOARD_SIZE = 5;
+const MAX_CLICKS = 5;
+const BEAM_WIDTH = 8;
+const SEARCH_DEPTH = 4;
+const MIN_CLICK_DELAY = 60;
+const BASE_CLICK_DELAY = 100;
+const evaluationCache = new Map(); // Evaluation cache
+const MAX_CACHE_SIZE = 500; // Add cache size limit
 
-    // ====== 动态权重函数 ======
-    function getScoreWeight(score) {
-        if (score < 800) return { score: 100, layout: 1 };
-        if (score < 1500) return { score: 85, layout: 0.8 }; // 提高布局权重
-        if (score < 2000) return { score: 70, layout: 0.6 }; // 新增2000分过渡阶段
-        return { score: 60, layout: 0.4 }; // 2000分以上保留部分布局权重
-    }
+// ====== Dynamic weight function ======
+function getScoreWeight(score) {
+    if (score < 800) return {
+        score: 100,
+        layout: 1
+    };
+    if (score < 1500) return {
+        score: 85,
+        layout: 0.8
+    }; // Increase layout weight
+    if (score < 2000) return {
+        score: 70,
+        layout: 0.6
+    }; // Add 2000 points transition stage
+    return {
+        score: 60,
+        layout: 0.4
+    }; // 2000 points and above retain some layout weight
+}
 
-    // ====== 阶段策略 ======
-    function getCurrentPhase(score) {
-        if (score >= 2000) return {
-            maxClicks: 2,
-            riskFactor: 0.2,
-            label: '2000+',
-            strategy: 'focusLargeGroups'
-        };
-        if (score >= 1800) return {
-            maxClicks: 2,
-            riskFactor: 0.3,
-            label: '1800+',
-            strategy: 'balanceEdgeAndCenter'
-        };
-        if (score >= 1500) return {
-            maxClicks: 3,
-            riskFactor: 0.4,
-            label: '1500+',
-            strategy: 'maximizeChainPotential'
-        };
-        if (score >= 1000) return {
-            maxClicks: 2,
-            riskFactor: 0.7,
-            label: '1000+',
-            strategy: 'conservativeGrowth'
-        };
-        return {
-            maxClicks: 3,
-            riskFactor: 1.0,
-            label: '基础',
-            strategy: 'default'
-        };
-    }
+// ====== Phase strategy ======
+function getCurrentPhase(score) {
+    if (score >= 2000) return {
+        maxClicks: 2,
+        riskFactor: 0.2,
+        label: '2000+',
+        strategy: 'focusLargeGroups'
+    };
+    if (score >= 1800) return {
+        maxClicks: 2,
+        riskFactor: 0.3,
+        label: '1800+',
+        strategy: 'balanceEdgeAndCenter'
+    };
+    if (score >= 1500) return {
+        maxClicks: 3,
+        riskFactor: 0.4,
+        label: '1500+',
+        strategy: 'maximizeChainPotential'
+    };
+    if (score >= 1000) return {
+        maxClicks: 2,
+        riskFactor: 0.7,
+        label: '1000+',
+        strategy: 'conservativeGrowth'
+    };
+    return {
+        maxClicks: 3,
+        riskFactor: 1.0,
+        label: 'Basic',
+        strategy: 'default'
+    };
+}
 ```
 
-## 开源协议
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) 
+## Open Source Agreement
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
