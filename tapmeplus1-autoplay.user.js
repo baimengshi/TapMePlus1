@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         TapMePlus1 自动通关（高分优化版）
+// @name         TapMePlus1 自动通关
 // @namespace    http://tampermonkey.net/
-// @version      7.2
+// @version      7.3
 // @description  自动通关脚本，动态权重布局评分，目标突破3000分（包含错误处理、性能优化和算法增强）
 // @author       baimengshi
 // @match        https://tapmeplus1.com/*
@@ -21,6 +21,7 @@
     const MIN_CLICK_DELAY = 60;
     const BASE_CLICK_DELAY = 100;
     const evaluationCache = new Map(); // 评估缓存
+    const MAX_CACHE_SIZE = 500; // 添加缓存大小限制
 
     // ====== 动态权重函数 ======
     function getScoreWeight(score) {
@@ -130,33 +131,33 @@
         return groups;
     }
 
-    // ====== 重力模拟（优化版） ======
+    // ====== 重力模拟 ======
     function applyGravitySim(board) {
         const size = board.length;
         let hasMovedOrFilled = false;
         let emptyCellsCreated = 0;
 
         for (let col = 0; col < size; col++) {
-            let emptyRow = size - 1;
+            let writeIndex = size - 1;
 
-            for (let row = size - 1; row >= 0; row--) {
-                if (board[row][col] !== null) {
-                    if (row !== emptyRow) {
-                        [board[emptyRow][col], board[row][col]] = [board[row][col], null];
+            // 第一次循环：移动现有块
+            for (let readIndex = size - 1; readIndex >= 0; readIndex--) {
+                if (board[readIndex][col] !== null) {
+                    if (readIndex !== writeIndex) {
+                        board[writeIndex][col] = board[readIndex][col];
+                        board[readIndex][col] = null;
                         hasMovedOrFilled = true;
                     }
-
-                    if (emptyRow > 0) {
-                        emptyRow--;
-                    }
+                    writeIndex--;
                 }
             }
 
-            while (emptyRow >= 0) {
-                board[emptyRow][col] = (Math.random() * 5 | 0) + 1;
+            // 第二次循环：填充空位
+            while (writeIndex >= 0) {
+                board[writeIndex][col] = (Math.random() * 5 | 0) + 1;
                 hasMovedOrFilled = true;
                 emptyCellsCreated++;
-                emptyRow--;
+                writeIndex--;
             }
         }
 
@@ -254,112 +255,54 @@
             if (g.cells.length >= 5) bigGroupCount++;
         }
 
+        // 合并多个循环为单次遍历
         let potentialChainCount = 0;
-        for (let r = 0; r < BOARD_SIZE; r++) {
-            for (let c = 0; c < BOARD_SIZE; c++) {
-                if (board[r][c] !== null) {
-                    let same = 0;
-                    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-                        const nr = r + dr, nc = c + dc;
-                        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === board[r][c]) same++;
-                    }
-                    if (same >= 1) potentialChainCount++;
-                }
-            }
-        }
-
-        let expandableGroupBonus = 0;
-        for (let r = 0; r < BOARD_SIZE; r++) {
-            for (let c = 0; c < BOARD_SIZE; c++) {
-                if (board[r][c] !== null) {
-                    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-                        const nr = r + dr, nc = c + dc;
-                        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === null) {
-                            const tempBoard = deepCopyBoard(board);
-                            tempBoard[nr][nc] = board[r][c];
-                            const newGroups = findAllConnectedGroups(tempBoard);
-                            for (const g of newGroups) {
-                                if (g.cells && g.cells.some(cell => cell.r === r && cell.c === c)) {
-                                    expandableGroupBonus += 2;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         let edgeGroupSize = 0;
-        for (let r = 0; r < BOARD_SIZE; r++) {
-            for (let c = 0; c < BOARD_SIZE; c++) {
-                if (board[r][c] !== null && (r === 0 || r === BOARD_SIZE - 1 || c === 0 || c === BOARD_SIZE - 1)) {
-                    let same = 0;
-                    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-                        const nr = r + dr, nc = c + dc;
-                        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === board[r][c]) same++;
-                    }
-                    if (same >= 1) edgeGroupSize++;
-                }
-            }
-        }
-
         let isolated = 0;
-        for (let r = 0; r < BOARD_SIZE; r++) {
-            for (let c = 0; c < BOARD_SIZE; c++) {
-                if (board[r][c] !== null) {
-                    let hasSameValueNeighbor = false;
-                    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-                        const nr = r + dr, nc = c + dc;
-                        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
-                            if (board[nr][nc] === board[r][c]) {
-                                hasSameValueNeighbor = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (!hasSameValueNeighbor) isolated++;
-                }
-            }
-        }
-
-        let vals = board.flat().filter(v => v !== null);
-        let avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 3;
-        let variance = vals.length ? vals.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / vals.length : 0;
-
-        let empty = board.flat().filter(v => v === null).length;
-
-        let edgeClickBonus = 0;
-        if (lastClick) {
-            const { row, col } = lastClick;
-            if ((row === 0 || row === BOARD_SIZE - 1) && (col === 0 || col === BOARD_SIZE - 1)) {
-                edgeClickBonus += 40;
-            }
-            else if (row === 0 || row === BOARD_SIZE - 1 || col === 0 || col === BOARD_SIZE - 1) {
-                edgeClickBonus += 20;
-            }
-        }
-
-        let mergeBigGroupBonus = 0;
-        if (lastClick) {
-            for (const g of groups) {
-                if (!g.cells || g.cells.length === 0) continue;
-                if (g.cells.length >= 5 && g.cells.some(cell => cell.r === lastClick.row && cell.c === lastClick.col)) {
-                    mergeBigGroupBonus += 50 + (g.cells.length - 5) * 10;
-                }
-            }
-        }
-
         const colorCounts = {};
+        let expandableGroupBonus = 0;
+        let sum = 0;
+        let count = 0;
+
         for (let r = 0; r < BOARD_SIZE; r++) {
             for (let c = 0; c < BOARD_SIZE; c++) {
                 const val = board[r][c];
-                if (val !== null) {
-                    colorCounts[val] = (colorCounts[val] || 0) + 1;
+                if (val === null) continue;
+
+                // 计算统计值
+                colorCounts[val] = (colorCounts[val] || 0) + 1;
+                sum += val;
+                count++;
+
+                // 检查邻居
+                let hasSameValueNeighbor = false;
+                for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+                    const nr = r + dr, nc = c + dc;
+                    if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                        if (board[nr][nc] === val) {
+                            hasSameValueNeighbor = true;
+                        }
+                        // 优化：直接计算可扩展组奖励
+                        else if (board[nr][nc] === null) {
+                            expandableGroupBonus += 2; // 简化计算
+                        }
+                    }
+                }
+
+                if (hasSameValueNeighbor) {
+                    potentialChainCount++;
+
+                    // 边缘组检测
+                    if (r === 0 || r === BOARD_SIZE - 1 || c === 0 || c === BOARD_SIZE - 1) {
+                        edgeGroupSize++;
+                    }
+                } else {
+                    isolated++;
                 }
             }
         }
 
+        // 计算链式潜力
         let chainPotential = 0;
         for (const color in colorCounts) {
             const count = colorCounts[color];
@@ -367,6 +310,20 @@
             if (count >= 6) chainPotential += 40;
         }
 
+        // 计算方差
+        const avg = count ? sum / count : 3;
+        let variance = 0;
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                const val = board[r][c];
+                if (val !== null) {
+                    variance += Math.pow(val - avg, 2);
+                }
+            }
+        }
+        variance = count ? variance / count : 0;
+
+        const empty = BOARD_SIZE * BOARD_SIZE - count;
         let conservativeScore =
             groupCount * 2 +
             maxGroupSize * 8 +
@@ -375,18 +332,16 @@
             potentialChainCount * 2 +
             expandableGroupBonus * 1 +
             empty * 1 +
-            edgeClickBonus +
-            mergeBigGroupBonus +
+            //edgeClickBonus +
+            //mergeBigGroupBonus +
             chainPotential * 0.8 +
             -isolated * 2 +
             -variance * 0.2;
 
         evaluationCache.set(cacheKey, conservativeScore);
-        if (evaluationCache.size > 1000) {
-            const keys = Array.from(evaluationCache.keys());
-            for (let i = 0; i < 100; i++) {
-                evaluationCache.delete(keys[i]);
-            }
+        if (evaluationCache.size > MAX_CACHE_SIZE) {
+            const keys = Array.from(evaluationCache.keys()).slice(0, 100);
+            keys.forEach(key => evaluationCache.delete(key));
         }
 
         return conservativeScore;
@@ -407,7 +362,7 @@
             strategy: 'balanceEdgeAndCenter'
         };
         if (score >= 1500) return {
-            maxClicks: 3,
+            maxClicks: 2,
             riskFactor: 0.4,
             label: '1500+',
             strategy: 'maximizeChainPotential'
@@ -419,7 +374,7 @@
             strategy: 'conservativeGrowth'
         };
         return {
-            maxClicks: 3,
+            maxClicks: 2,
             riskFactor: 1.0,
             label: '基础',
             strategy: 'default'
@@ -607,22 +562,30 @@
     }
 
     // ====== 动画等待 ======
-    async function waitForAnimationToFinish(timeout = 20000, interval = 50) {
+    async function waitForAnimationToFinish(timeout = 15000, interval = 100) {
         const start = Date.now();
+        let lastAnimatingCount = -1;
+        let stableCount = 0;
+
         while (Date.now() - start < timeout) {
             const animatingElements = document.querySelectorAll('.cell.highlight, .cell-clone, .vanish');
-            if (animatingElements.length === 0) return true;
+            const currentCount = animatingElements.length;
 
-            // 检查游戏是否意外结束
-            if (isGameEndModalVisible()) {
-                handleGameEndModal();
-                return false;
+            if (currentCount === 0 && lastAnimatingCount === 0) {
+                stableCount++;
+                if (stableCount >= 3) return true;
+            } else {
+                stableCount = 0;
             }
+
+            lastAnimatingCount = currentCount;
             await sleep(interval);
         }
-        log('警告：动画等待超时，强制继续', 'warn');
+
+        log('动画等待超时，强制继续', 'warn');
         return false;
     }
+
 
     // ====== 游戏结束检测 ======
     function isGameEndModalVisible() {
@@ -796,7 +759,7 @@
         });
 
         const title = document.createElement('div');
-        title.textContent = 'TapMePlus1 自动通关 v7.2';
+        title.textContent = 'TapMePlus1 自动通关 v7.3';
         title.style.fontWeight = 'bold';
         title.style.marginBottom = '10px';
         title.style.fontSize = '16px';
@@ -1030,3 +993,4 @@
         init();
     }
 })();
+// 打工人，打工魂，致敬9996！
