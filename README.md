@@ -1,6 +1,6 @@
 # TapMePlus1 自动通关脚本
 
-一款强大的 Tampermonkey 用户脚本，用于自动化 TapMePlus1 游戏的通关过程。
+一款强大的 Greasemonkey 用户脚本，用于自动化 TapMePlus1 游戏的通关过程。
 
 ## 功能特性
 
