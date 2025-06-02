@@ -51,5 +51,6 @@ The script contains the following adjustable parameters (modify in code):
     };
 ```
 
-## Open Source Agreement
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+## License
+
+The GPL-3.0 License.
