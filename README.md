@@ -1,3 +1,5 @@
+<a name="readme-top"></a>
+
 # TapMePlus1 Auto-Clearing Script
 
 A powerful Greasemonkey userscript for automating the process of clearing the TapMePlus1 game.
