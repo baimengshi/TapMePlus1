@@ -31,29 +31,35 @@ The script contains the following adjustable parameters (modify in code):
 // ====== Basic parameters ======
     const BOARD_SIZE = 5;
     const MAX_CLICKS = 5;
-    const BEAM_WIDTH = 8;
+    const BEAM_WIDTH = 10;
     const SEARCH_DEPTH = 4;
-    const MIN_CLICK_DELAY = 60;
-    const BASE_CLICK_DELAY = 100;
-    const MAX_CACHE_SIZE = 500;
-    const evaluationCache = new Map();
+    const MIN_CLICK_DELAY = 50;
+    const BASE_CLICK_DELAY = 80;
+    const MAX_CACHE_SIZE = 1000;
 
-// ====== Dynamic weight function ======
+// ====== Optimized Positional Weights Matrix ======
+    const POSITIONAL_WEIGHTS = [
+        [1, 2, 3, 2, 1],
+        [2, 4, 6, 4, 2],
+        [3, 6, 8, 6, 3],
+        [2, 4, 6, 4, 2],
+        [1, 2, 3, 2, 1]
+    ];
+
+// ====== Dynamic weight  ======
     const getScoreWeight = score => {
-        if (score < 800) return { score: 100, layout: 1 };
-        if (score < 1500) return { score: 85, layout: 0.8 };
-        if (score < 2000) return { score: 70, layout: 0.6 };
-        return { score: 60, layout: 0.4 };
+        if (score < 1000) return { score: 100, layout: 1.0 }; // Early game, balance layout and score
+        if (score < 2500) return { score: 85, layout: 1.2 };  // Mid-game, focus on building potential
+        return { score: 110, layout: 0.8 }; // Late/sprint game, prioritize converting advantage to score
     };
 
-// ====== Phase strategy ======
+// ====== Phase strategy  ======
     const getCurrentPhase = score => {
-        if (score >= 4000) return { maxClicks: 1, riskFactor: 0.2, label: '4000+', strategy: 'focusLargeGroups' };
-        if (score >= 3000) return { maxClicks: 2, riskFactor: 0.3, label: '3000+', strategy: 'balanceEdgeAndCenter' };
-        if (score >= 2000) return { maxClicks: 2, riskFactor: 0.4, label: '2000+', strategy: 'maximizeChainPotential' };
-        if (score >= 1000) return { maxClicks: 2, riskFactor: 0.7, label: '1000+', strategy: 'conservativeGrowth' };
-        return { maxClicks: 2, riskFactor: 1.0, label: '基础', strategy: 'default' };
+        if (score >= 2500) return { maxClicks: 1, label: '2500+ Sprint' };
+        if (score >= 1000) return { maxClicks: 2, label: '1000+ Mid-game' };
+        return { maxClicks: 2, label: 'Base Early-game' };
     };
+
 ```
 
 ## License
