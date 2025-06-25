@@ -20,7 +20,7 @@ A powerful Greasemonkey userscript for automating the process of clearing the Ta
 ## Installation instructions
 
 1. Install the [violentmonkey](https://violentmonkey.github.io/) browser extension
-2. Click to install the [TapmePlus1 script](https://github.com/baimengshi/tapmeplus1/raw/main/TapMePlus1_auto-clear.user.js)
+2. Click to install the [TapmePlus1 script](https://github.com/baimengshi/tapmeplus1/raw/main/TapMePlus1-AI-Solver.user.js)
 3. Visit [TapMePlus1](https://tapmeplus1.com/) Start the game
 
 ## Configuration options
