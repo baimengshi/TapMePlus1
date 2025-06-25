@@ -27,7 +27,7 @@
     const MAX_CACHE_SIZE = 1000;
     const evaluationCache = new Map();
 
-    // ====== 优化后的位置权重矩阵 ======
+    // ====== 位置权重矩阵 ======
     const POSITIONAL_WEIGHTS = [
         [1, 2, 3, 2, 1],
         [2, 4, 6, 4, 2],
