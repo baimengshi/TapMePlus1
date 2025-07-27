@@ -74,7 +74,7 @@ The script contains the following adjustable parameters (modify in code):
 
 ## License
 
-The GPL-3.0 License.
+The AGPL-3.0 license.
 
 <p align="right" style="font-size: 14px; color: #555; margin-top: 20px;">
     <a href="#readme-top" style="text-decoration: none; color: #007bff; font-weight: bold;">
