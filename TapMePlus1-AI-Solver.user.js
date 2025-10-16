@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         TapMePlus1 自动通关 (高分优化版)
+// @name         TapMePlus1 自动通关
 // @namespace    https://violentmonkey.github.io
-// @version      8.0
-// @description  修复核心BUG，重构启发式函数，引入价值梯度，目标突破3000分！
+// @version      8.1
+// @description  使用自动化脚本，实现自动通关TapMePlus1游戏
 // @author       baimengshi
 // @match        https://tapmeplus1.com/*
 // @grant        none
@@ -38,9 +38,9 @@
 
     // ====== 动态权重  ======
     const getScoreWeight = score => {
-        if (score < 1000) return { score: 100, layout: 1.0 }; // 前期，布局和得分并重
-        if (score < 2500) return { score: 85, layout: 1.2 };  // 中期，更注重构建有潜力的布局
-        return { score: 110, layout: 0.8 }; // 后期/冲刺，优先将优势转化为得分
+        if (score >= 2500) return { score: 130, layout: 0.4 }; // 冲刺阶段：重得分轻布局
+        if (score >= 1000) return { score: 90, layout: 1.3 };  // 中期：平衡发展
+        return { score: 80, layout: 1.5 };                     // 前期：重布局
     };
 
     // ====== 工具函数 ======
@@ -154,6 +154,7 @@
 
         let layoutScore = 0;
         const colorCounts = {};
+        const isSprint = getScoreFromDOM() >= 2500;
 
         for (let r = 0; r < BOARD_SIZE; r++) {
             for (let c = 0; c < BOARD_SIZE; c++) {
@@ -163,38 +164,27 @@
                 colorCounts[val] = (colorCounts[val] || 0) + 1;
 
                 // 1. 位置和价值奖励
-                layoutScore += POSITIONAL_WEIGHTS[r][c] * val * 0.5;
+                layoutScore += POSITIONAL_WEIGHTS[r][c] * val * (isSprint ? 0.7 : 0.5);
 
-                // 2. 连接性与价值梯度奖励
-                let sameNeighbors = 0;
+                // 2. 价值梯度奖励
                 let smoothnessBonus = 0;
-                const neighbors = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]]; // 包含斜向
-                neighbors.forEach(([dr, dc], index) => {
+                const neighbors = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]];
+                neighbors.forEach(([dr, dc]) => {
                     const nr = r + dr, nc = c + dc;
                     if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] !== null) {
                         const neighborVal = board[nr][nc];
-                        if (neighborVal === val) {
-                            sameNeighbors++;
-                        }
-                        // 核心：奖励价值梯度平滑的方块
                         if (neighborVal === val + 1) {
-                            smoothnessBonus += 25; // 大力奖励可升级的路径
+                            smoothnessBonus += isSprint ? 50 : 25; // 冲刺阶段大幅提升梯度奖励
                         } else if (neighborVal === val - 1) {
-                            smoothnessBonus += 10;
+                            smoothnessBonus += isSprint ? 20 : 10;
                         }
                     }
                 });
-
                 layoutScore += smoothnessBonus;
-                if (sameNeighbors > 0) {
-                    layoutScore += sameNeighbors * 10;
-                } else {
-                    layoutScore -= 25; // 惩罚孤立方块
-                }
 
-                // 3. 惩罚悬空方块
+                // 惩罚悬空方块
                 if (r < BOARD_SIZE - 1 && board[r + 1][c] === null) {
-                    layoutScore -= 15;
+                    layoutScore -= isSprint ? 5 : 15;
                 }
             }
         }
@@ -213,26 +203,57 @@
 
     // ====== 阶段策略  ======
     const getCurrentPhase = score => {
-        if (score >= 2500) return { maxClicks: 1, label: '2500+ 冲刺' };
-        if (score >= 1000) return { maxClicks: 2, label: '1000+ 中期' };
-        return { maxClicks: 2, label: '基础 前期' };
+        if (score >= 2500) return {
+            maxClicks: 1,
+            label: '2500+ 冲刺',
+            searchDepth: 2,    // 冲刺阶段降低搜索深度
+            beamWidth: 15      // 增加搜索宽度
+        };
+        if (score >= 1000) return {
+            maxClicks: 2,
+            label: '1000+ 中期',
+            searchDepth: 3,
+            beamWidth: 10
+        };
+        return {
+            maxClicks: 2,
+            label: '基础 前期',
+            searchDepth: 2,
+            beamWidth: 8
+        };
     };
 
-    // ====== 混合贪心策略 (用于终局) ======
+    // ======  终局策略优化 ======
     const findBestGreedyMove = (board, clicksLeft) => {
         let bestMove = null, maxValue = -Infinity;
         const weights = getScoreWeight(getScoreFromDOM()); // 使用当前分数的权重
+        const isSprint = getScoreFromDOM() >= 2500; // 判断是否在冲刺阶段
 
         for (let i = 0; i < BOARD_SIZE; i++) {
             for (let j = 0; j < BOARD_SIZE; j++) {
                 if (board[i][j] !== null) {
+                    // 模拟点击
                     const tempBoard = deepCopyBoard(board);
                     tempBoard[i][j]++;
+
+                    // 模拟消除过程
                     const sim = simulateElimination(tempBoard, clicksLeft - 1);
-                    const value = sim.totalScore * weights.score + evaluateBoardPotential(sim.board) * weights.layout * 0.2; // 终局时布局权重降低
+
+                    // 计算价值
+                    const layoutWeight = isSprint ? 0.1 : 0.2; // 冲刺阶段大幅降低布局权重
+                    const value = sim.totalScore * weights.score +
+                        evaluateBoardPotential(sim.board) * weights.layout * layoutWeight;
+
                     if (value > maxValue) {
                         maxValue = value;
-                        bestMove = { row: i, col: j, times: 1, scoreGain: sim.totalScore, layoutScore: evaluateBoardPotential(sim.board), value };
+                        bestMove = {
+                            row: i,
+                            col: j,
+                            times: 1,
+                            scoreGain: sim.totalScore,
+                            layoutScore: evaluateBoardPotential(sim.board),
+                            value
+                        };
                     }
                 }
             }
@@ -244,6 +265,10 @@
     const beamSearch = (board, clicksLeft, scoreNow) => {
         const phase = getCurrentPhase(scoreNow);
         const weights = getScoreWeight(scoreNow);
+
+        // 动态调整搜索参数
+        const searchDepth = phase.searchDepth;
+        const beamWidth = phase.beamWidth;
 
         if (clicksLeft <= 2) {
             const move = findBestGreedyMove(board, clicksLeft);
@@ -287,7 +312,7 @@
             // 评估并排序
             nextBeam.forEach(node => {
                 node.layoutScore = evaluateBoardPotential(node.board);
-                // [BUG修复] 这里的value不再累加，而是基于当前序列的最终结果进行评估
+                // 基于当前序列的最终结果进行评估
                 node.value = node.scoreGain * weights.score + node.layoutScore * weights.layout;
             });
 
@@ -406,8 +431,9 @@
                 break;
             }
 
+            // 点击速度优化
             let delay = BASE_CLICK_DELAY;
-            if (scoreNow >= 2000) delay = MIN_CLICK_DELAY + 20;
+            if (scoreNow >= 2500) delay = MIN_CLICK_DELAY;      // 冲刺阶段最快速度
             else if (scoreNow >= 1000) delay = MIN_CLICK_DELAY + 30;
 
             for (let k = 0; k < bestMove.times; k++) {
@@ -499,7 +525,7 @@
         };
 
         const title = document.createElement('div');
-        title.textContent = 'TapMePlus1 自动通关 v8.0';
+        title.textContent = 'TapMePlus1 自动通关 v8.1';
         Object.assign(title.style, { fontWeight: 'bold', fontSize: '16px', textAlign: 'center', marginBottom: '10px' });
 
         statusDiv = document.createElement('div');
