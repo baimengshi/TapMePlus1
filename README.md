@@ -58,17 +58,32 @@ The script contains the following adjustable parameters (modify in code):
 
 // ====== Dynamic weight  ======
     const getScoreWeight = score => {
-        if (score < 1000) return { score: 100, layout: 1.0 }; // Early game, balance layout and score
-        if (score < 2500) return { score: 85, layout: 1.2 };  // Mid-game, focus on building potential
-        return { score: 110, layout: 0.8 }; // Late/sprint game, prioritize converting advantage to score
-    };
+    if (score >= 2500) return { score: 130, layout: 0.4 }; // 冲刺阶段：重得分轻布局
+    if (score >= 1000) return { score: 90, layout: 1.3 };  // 中期：平衡发展
+    return { score: 80, layout: 1.5 };                     // 前期：重布局
+};
 
 // ====== Phase strategy  ======
     const getCurrentPhase = score => {
-        if (score >= 2500) return { maxClicks: 1, label: '2500+ Sprint' };
-        if (score >= 1000) return { maxClicks: 2, label: '1000+ Mid-game' };
-        return { maxClicks: 2, label: 'Base Early-game' };
+    if (score >= 2500) return { 
+        maxClicks: 1, 
+        label: '2500+ 冲刺',
+        searchDepth: 2,    // 冲刺阶段降低搜索深度
+        beamWidth: 15      // 增加搜索宽度
     };
+    if (score >= 1000) return { 
+        maxClicks: 2, 
+        label: '1000+ 中期',
+        searchDepth: 3,
+        beamWidth: 10
+    };
+    return { 
+        maxClicks: 2, 
+        label: '基础 前期',
+        searchDepth: 2,
+        beamWidth: 8
+    };
+};
 
 ```
 
